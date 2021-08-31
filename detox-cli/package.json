@@ -1,6 +1,6 @@
 {
   "name": "detox-cli",
-  "version": "18.14.1",
+  "version": "18.20.1",
   "description": "Optional wrapper for Detox CLI, meant to be installed globally",
   "main": "cli.js",
   "scripts": {
@@ -23,8 +23,7 @@
     "url": "https://github.com/wix/Detox/issues"
   },
   "dependencies": {
-    "chalk": "^4.0.0",
-    "is-installed-globally": "^0.4.0"
+    "chalk": "^4.0.0"
   },
   "homepage": "https://github.com/wix/Detox"
 }

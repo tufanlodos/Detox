@@ -70,7 +70,7 @@ class Device {
   }
 
   get id() {
-    return this._deviceId;
+    return this.deviceDriver.getExternalId(this._deviceId);
   }
 
   get name() {
@@ -338,8 +338,12 @@ class Device {
       await this.terminateApp(bundleId);
     }
 
+    const currentAppLaunchArgs = this._currentApp
+      ? this._currentApp.launchArgs
+      : null;
+
     const baseLaunchArgs = {
-      ...this._currentApp.launchArgs,
+      ...currentAppLaunchArgs,
       ...params.launchArgs,
     };
 

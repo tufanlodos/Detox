@@ -27,6 +27,23 @@ class ADB {
     return { devices, stdout };
   }
 
+  async getState(deviceId) {
+    try {
+      const output = await this.adbCmd(deviceId, `get-state`, {
+        verbosity: 'low'
+      });
+
+      return output.stdout.trim();
+    } catch (e) {
+      const stderr = e.stderr || '';
+      if (stderr.includes('not found')) {
+        return 'none';
+      } else {
+        throw e;
+      }
+    }
+  }
+
   async unlockScreen(deviceId) {
     const {
       mWakefulness,
@@ -88,10 +105,10 @@ class ADB {
     const apiLvl = await this.apiLevel(deviceId);
 
     let childProcess;
-    if (apiLvl >= 24) {
+    if (apiLvl >= 23) {
       childProcess = await this.adbCmd(deviceId, `install -r -g -t ${apkPath}`);
     } else {
-      childProcess = await this.adbCmd(deviceId, `install -rg ${apkPath}`);
+      childProcess = await this.adbCmd(deviceId, `install -r -g ${apkPath}`);
     }
 
     const [failure] = (childProcess.stdout || '').match(/^Failure \[.*\]$/m) || [];
@@ -103,8 +120,14 @@ class ADB {
     }
   }
 
-  /*async*/ remoteInstall(deviceId, path) {
-    return this.shell(deviceId, `pm install -r -g -t ${path}`);
+  async remoteInstall(deviceId, path) {
+    const apiLvl = await this.apiLevel(deviceId);
+
+    if (apiLvl >= 23) {
+      return this.shell(deviceId, `pm install -r -g -t ${path}`);
+    } else {
+      return this.shell(deviceId, `pm install -r -g ${path}`);
+    }
   }
 
   async uninstall(deviceId, appId) {
@@ -300,6 +323,10 @@ class ADB {
 
   async reverseRemove(deviceId, port) {
     return this.adbCmd(deviceId, `reverse --remove tcp:${port}`);
+  }
+
+  async emuKill(deviceId) {
+    return this.adbCmd(deviceId, `emu kill`);
   }
 
   // TODO refactor the whole thing so as to make usage of BinaryExec -- similar to EmulatorExec
