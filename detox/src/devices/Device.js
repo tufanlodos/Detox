@@ -1,11 +1,9 @@
-const _ = require('lodash');
-
 const DetoxRuntimeError = require('../errors/DetoxRuntimeError');
-const cutStackTraces = require('../utils/cutStackTraces');
 const debug = require('../utils/debug'); // debug utils, leave here even if unused
 const { traceCall } = require('../utils/trace');
+const wrapWithStackTraceCutter = require('../utils/wrapWithStackTraceCutter');
 
-const LaunchArgsEditor = require('./LaunchArgsEditor');
+const LaunchArgsEditor = require('./utils/LaunchArgsEditor');
 
 class Device {
   constructor({
@@ -17,7 +15,7 @@ class Device {
     sessionConfig,
     runtimeErrorComposer,
   }) {
-    cutStackTraces(this, [
+    wrapWithStackTraceCutter(this, [
       'captureViewHierarchy',
       'clearKeychain',
       'disableSynchronization',
@@ -60,7 +58,7 @@ class Device {
     this._errorComposer = runtimeErrorComposer;
 
     this._currentApp = null;
-    this._currentAppLaunchArgs = null;
+    this._appLaunchArgs = new LaunchArgsEditor();
     this._deviceId = undefined;
     this._processes = {};
 
@@ -82,17 +80,14 @@ class Device {
   }
 
   get appLaunchArgs() {
-    if (!this._currentAppLaunchArgs) {
-      this._currentAppLaunchArgs = this._getCurrentAppsLaunchArgs();
-    }
-    return this._currentAppLaunchArgs;
+    return this._appLaunchArgs;
   }
 
   async prepare() {
     await this.deviceDriver.prepare();
 
     this._deviceId = await traceCall('acquireDevice', () =>
-      this.deviceDriver.acquireFreeDevice(this._deviceConfig.device));
+      this.deviceDriver.acquireFreeDevice(this._deviceConfig.device, this._deviceConfig));
 
     const appAliases = Object.keys(this._appsConfig);
     if (appAliases.length === 1) {
@@ -120,7 +115,8 @@ class Device {
     }
 
     this._currentApp = appConfig;
-    this._currentAppLaunchArgs = null;
+    this._appLaunchArgs.reset();
+    this._appLaunchArgs.modify(this._currentApp.launchArgs);
     await this._inferBundleIdFromBinary();
   }
 
@@ -197,7 +193,8 @@ class Device {
       return this.deviceDriver.installApp(
         this._deviceId,
         currentApp.binaryPath,
-        currentApp.testBinaryPath
+        currentApp.testBinaryPath,
+        this._deviceConfig.forceAdbInstall
       );
     });
   }
@@ -276,7 +273,7 @@ class Device {
   }
 
   async resetContentAndSettings() {
-    await this.deviceDriver.resetContentAndSettings(this._deviceId);
+    await this.deviceDriver.resetContentAndSettings(this._deviceId, this._deviceConfig);
   }
 
   getPlatform() {
@@ -339,7 +336,7 @@ class Device {
     }
 
     const baseLaunchArgs = {
-      ...this._currentApp.launchArgs,
+      ...this._appLaunchArgs.get(),
       ...params.launchArgs,
     };
 
@@ -426,16 +423,12 @@ class Device {
     return (paramsCounter === 1);
   }
 
-  _defaultLaunchArgs() {
-    return {
-      'detoxServer': this._sessionConfig.server,
-      'detoxSessionId': this._sessionConfig.sessionId
-    };
-  }
-
   _prepareLaunchArgs(additionalLaunchArgs) {
-    const launchArgs = _.merge(this._defaultLaunchArgs(), additionalLaunchArgs);
-    return launchArgs;
+    return {
+      detoxServer: this._sessionConfig.server,
+      detoxSessionId: this._sessionConfig.sessionId,
+      ...additionalLaunchArgs
+    };
   }
 
   async _inferBundleIdFromBinary() {
@@ -444,12 +437,6 @@ class Device {
     if (!bundleId) {
       this._currentApp.bundleId = await this.deviceDriver.getBundleIdFromBinary(binaryPath);
     }
-  }
-
-  _getCurrentAppsLaunchArgs() {
-    const currentApp = this._getCurrentApp();
-    currentApp.launchArgs = currentApp.launchArgs || {};
-    return new LaunchArgsEditor(currentApp.launchArgs);
   }
 }
 
